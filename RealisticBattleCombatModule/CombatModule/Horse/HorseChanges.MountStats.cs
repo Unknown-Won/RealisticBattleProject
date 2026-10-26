@@ -101,6 +101,8 @@ namespace RBMCombat
                 }
 
                 agentDrivenProperties.AttributeShieldMissileCollisionBodySizeAdder = 0.01f;
+                EquipmentElement mountForCharge = agent.SpawnEquipment[EquipmentIndex.ArmorItemEndSlot];
+                float mountWeight = mountForCharge.Item != null && mountForCharge.Weight > 0f ? mountForCharge.Weight : (float)agent.Monster.Weight;
                 float weightOfHorseAndRaider = 0f;
                 if (agent.RiderAgent != null)
                 {
@@ -108,13 +110,13 @@ namespace RBMCombat
                     weightOfHorseAndRaider += (float)agent.RiderAgent.Monster.Weight;
                     weightOfHorseAndRaider += agent.RiderAgent.SpawnEquipment.GetTotalWeightOfArmor(forHuman: true);
                     weightOfHorseAndRaider += equipment.GetTotalWeightOfWeapons();
-                    weightOfHorseAndRaider += (float)agent.Monster.Weight;
+                    weightOfHorseAndRaider += mountWeight;
                     weightOfHorseAndRaider += agent.SpawnEquipment.GetTotalWeightOfArmor(forHuman: false);
                     weightOfHorseAndRaider += 100f;
                 }
                 else
                 {
-                    weightOfHorseAndRaider += (float)agent.Monster.Weight;
+                    weightOfHorseAndRaider += mountWeight;
                     weightOfHorseAndRaider += agent.SpawnEquipment.GetTotalWeightOfArmor(forHuman: false);
                     weightOfHorseAndRaider += 100f;
                 }
@@ -202,6 +204,8 @@ namespace RBMCombat
                 }
 
                 agentDrivenProperties.AttributeShieldMissileCollisionBodySizeAdder = 0.01f;
+                EquipmentElement mountForCharge = agent.SpawnEquipment[EquipmentIndex.ArmorItemEndSlot];
+                float mountWeight = mountForCharge.Item != null && mountForCharge.Weight > 0f ? mountForCharge.Weight : (float)agent.Monster.Weight;
                 float weightOfHorseAndRaider = 0f;
                 if (agent.RiderAgent != null)
                 {
@@ -209,12 +213,12 @@ namespace RBMCombat
                     weightOfHorseAndRaider += (float)agent.RiderAgent.Monster.Weight;
                     weightOfHorseAndRaider += agent.RiderAgent.SpawnEquipment.GetTotalWeightOfArmor(forHuman: true);
                     weightOfHorseAndRaider += equipment.GetTotalWeightOfWeapons();
-                    weightOfHorseAndRaider += (float)agent.Monster.Weight;
+                    weightOfHorseAndRaider += mountWeight;
                     weightOfHorseAndRaider += agent.SpawnEquipment.GetTotalWeightOfArmor(forHuman: false);
                 }
                 else
                 {
-                    weightOfHorseAndRaider += (float)agent.Monster.Weight;
+                    weightOfHorseAndRaider += mountWeight;
                     weightOfHorseAndRaider += agent.SpawnEquipment.GetTotalWeightOfArmor(forHuman: false);
                 }
                 agentDrivenProperties.MountChargeDamage = weightOfHorseAndRaider;
