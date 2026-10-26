@@ -31,6 +31,10 @@ namespace RBM.AgentStatusBar
         // Share of the screen size a bar's anchor may be outside the screen and still be drawn (bars extend past their anchor).
         private const float OffScreenMargin = 0.1f;
 
+        // A shown bar keeps its widget this long after it was last on screen, so bars at the edge of the range or the view
+        // don't create and drop widgets every few frames.
+        private const float ReleaseAfterHiddenSeconds = 5f;
+
         // Set once per frame while bars are shown, read for every agent.
         private Vec3 _cameraDirection;
 
@@ -86,6 +90,13 @@ namespace RBM.AgentStatusBar
             // Only bars that can show (not toggled off, hit, focused or within DistanceCutOff) are projected to the screen and
             // updated; all others are just hidden. The map isn't changed inside the loop: removals are applied after it.
             bool barsShown = !_keyToggled && !_escapeMenuOpened;
+            if (!barsShown)
+            {
+                // Bars toggled off (the default, Ctrl+H): no bar has a widget and nothing is done per agent. Deleted agents
+                // still leave the map through OnAgentDeleted; the rest is caught up when the bars are shown again.
+                ReleaseAllBars();
+                return;
+            }
             Vec3 playerPos = _mainAgent != null ? _mainAgent.Position : _camera.Position;
             Vec3 cameraPos = _camera.Position;
             float cutOffSquared = (float)AgentStatusBarConfig.DistanceCutOff * AgentStatusBarConfig.DistanceCutOff;
@@ -122,20 +133,20 @@ namespace RBM.AgentStatusBar
         {
             if (!status.IsEnabled || !barsShown)
             {
-                status.IsHidden = true;
+                HideBar(status, dt);
                 return;
             }
             Vec3 pos = status._agent.Position;
             pos.z += (!agent.HasMount) ? 2.2f : 3.2f;
             if (!status._isHit && !status.IsAgentFocused && (pos - playerPos).LengthSquared > cutOffSquared)
             {
-                status.IsHidden = true;
+                HideBar(status, dt);
                 return;
             }
             // Behind the camera the projection below would give w < 0, which hides the bar anyway.
             if (Vec3.DotProduct(pos - cameraPos, _cameraDirection) < 0f)
             {
-                status.IsHidden = true;
+                HideBar(status, dt);
                 return;
             }
             float num0 = 0f;
@@ -148,7 +159,7 @@ namespace RBM.AgentStatusBar
                 // Off screen: nothing to draw, but the hit fade keeps running so the bar still times out and gets removed.
                 if (num0 < -_screenMarginX || num0 > _screenWidth + _screenMarginX || num1 < -_screenMarginY || num1 > _screenHeight + _screenMarginY)
                 {
-                    status.IsHidden = true;
+                    HideBar(status, dt);
                     status.tick(dt, _keyToggled);
                     return;
                 }
@@ -171,18 +182,60 @@ namespace RBM.AgentStatusBar
                 {
                     status.ShowStance = false;
                 }
+                // A bar gets its widget only once it actually shows: the bound list holds the bars on screen recently,
+                // not one per soldier, so adding and removing them stays cheap.
+                status._hiddenTime = 0f;
+                if (!status._isListed)
+                {
+                    status._isListed = true;
+                    _agentStatusList.Add(status);
+                }
             }
             else
             {
-                status.IsHidden = true;
+                HideBar(status, dt);
             }
+        }
+
+        // Hides a bar, and gives back its widget once it has stayed hidden for a while (out of range, off screen, faded out).
+        private void HideBar(AgentStatusVM status, float dt)
+        {
+            status.IsHidden = true;
+            if (status._isListed)
+            {
+                status._hiddenTime += dt;
+                if (status._hiddenTime > ReleaseAfterHiddenSeconds)
+                {
+                    status._isListed = false;
+                    _agentStatusList.Remove(status);
+                }
+            }
+        }
+
+        private void ReleaseAllBars()
+        {
+            if (_agentStatusList.Count == 0)
+            {
+                return;
+            }
+            foreach (AgentStatusVM status in _agentStatusList)
+            {
+                status.IsHidden = true;
+                status._isListed = false;
+                status._hiddenTime = 0f;
+            }
+            _agentStatusList.Clear();
         }
 
         private void RemoveEntry(Agent agent, AgentStatusVM status)
         {
             status.IsEnabled = false;
             _agentStatusMap.Remove(agent);
-            _agentStatusList.Remove(status);
+            if (status._isListed)
+            {
+                status._isListed = false;
+                _agentStatusList.Remove(status);
+            }
         }
 
         public void OnAgentDeleted(Agent agent)
@@ -256,7 +309,6 @@ namespace RBM.AgentStatusBar
             {
                 AgentStatusVM asvm = new AgentStatusVM(agent);
                 _agentStatusMap.Add(agent, asvm);
-                _agentStatusList.Add(asvm);
             }
         }
     }

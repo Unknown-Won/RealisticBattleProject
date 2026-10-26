@@ -40,6 +40,11 @@ namespace RBM.AgentStatusBar
 
         public bool _isHit = false;
 
+        // In UnitStatusVM's bound list, i.e. it has a widget; and how long it has been hidden since it last showed.
+        public bool _isListed = false;
+
+        public float _hiddenTime = 0f;
+
         private const float _fadeTime = 2f;
 
         private bool _isKeyToggled;
