@@ -28,6 +28,14 @@ namespace RBM.AgentStatusBar
 
         private readonly List<KeyValuePair<Agent, AgentStatusVM>> _entriesToRemove = new List<KeyValuePair<Agent, AgentStatusVM>>();
 
+        // Share of the screen size a bar's anchor may be outside the screen and still be drawn (bars extend past their anchor).
+        private const float OffScreenMargin = 0.1f;
+
+        // Set once per frame while bars are shown, read for every agent.
+        private Vec3 _cameraDirection;
+
+        private float _screenWidth, _screenHeight, _screenMarginX, _screenMarginY;
+
         private List<Agent> _newAgents = new List<Agent>();
 
         [DataSourceProperty]
@@ -81,6 +89,14 @@ namespace RBM.AgentStatusBar
             Vec3 playerPos = _mainAgent != null ? _mainAgent.Position : _camera.Position;
             Vec3 cameraPos = _camera.Position;
             float cutOffSquared = (float)AgentStatusBarConfig.DistanceCutOff * AgentStatusBarConfig.DistanceCutOff;
+            if (barsShown)
+            {
+                _cameraDirection = _camera.Direction;
+                _screenMarginX = Screen.RealScreenResolutionWidth * OffScreenMargin;
+                _screenMarginY = Screen.RealScreenResolutionHeight * OffScreenMargin;
+                _screenWidth = Screen.RealScreenResolutionWidth;
+                _screenHeight = Screen.RealScreenResolutionHeight;
+            }
             foreach (KeyValuePair<Agent, AgentStatusVM> entry2 in _agentStatusMap)
             {
                 // Never read a deleted agent's position (freed native pointer); the entry is dropped below.
@@ -116,13 +132,27 @@ namespace RBM.AgentStatusBar
                 status.IsHidden = true;
                 return;
             }
+            // Behind the camera the projection below would give w < 0, which hides the bar anyway.
+            if (Vec3.DotProduct(pos - cameraPos, _cameraDirection) < 0f)
+            {
+                status.IsHidden = true;
+                return;
+            }
             float num0 = 0f;
             float num1 = 0f;
             float num2 = 0f;
             MBWindowManager.WorldToScreen(_camera, pos, ref num0, ref num1, ref num2);
-            status.Distance = pos.Distance(playerPos);
-            if (num2 >= 0f && (status._isHit || status.Distance <= (float)AgentStatusBarConfig.DistanceCutOff || status.IsAgentFocused))
+            float distance = pos.Distance(playerPos);
+            if (num2 >= 0f && (status._isHit || distance <= (float)AgentStatusBarConfig.DistanceCutOff || status.IsAgentFocused))
             {
+                // Off screen: nothing to draw, but the hit fade keeps running so the bar still times out and gets removed.
+                if (num0 < -_screenMarginX || num0 > _screenWidth + _screenMarginX || num1 < -_screenMarginY || num1 > _screenHeight + _screenMarginY)
+                {
+                    status.IsHidden = true;
+                    status.tick(dt, _keyToggled);
+                    return;
+                }
+                status.Distance = distance;
                 status.IsHidden = false;
                 status.ScreenZ = Convert.ToInt32(num2);
                 status.ScreenDistance = pos.Distance(cameraPos);
