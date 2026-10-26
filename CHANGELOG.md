@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Performance
+- The health and posture bars over troops (Ctrl+H) no longer slow down big battles while they're hidden, which is the default. Every soldier used to get a hidden bar that was still worked out every frame, and every death removed one from a list of thousands. Bars now exist only while they show. In a test with about 2,700 troops the game ran about 20% faster during the fighting.
+
 ## v4.5.4 (changes since v4.5.3)
 
 ### Combat
