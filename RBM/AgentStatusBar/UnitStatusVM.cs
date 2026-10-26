@@ -26,7 +26,7 @@ namespace RBM.AgentStatusBar
 
         private bool _keyToggled = true;
 
-        private Dictionary<Agent, AgentStatusVM> _agentDictionary;
+        private readonly List<KeyValuePair<Agent, AgentStatusVM>> _entriesToRemove = new List<KeyValuePair<Agent, AgentStatusVM>>();
 
         private List<Agent> _newAgents = new List<Agent>();
 
@@ -66,80 +66,85 @@ namespace RBM.AgentStatusBar
         {
             if (_newAgents.Count > 0)
             {
-                foreach (Agent agent in _newAgents.Where((Agent a) => !a.IsMainAgent && !a.IsMount && a.Team != null))
+                foreach (Agent agent in _newAgents)
                 {
-                    AddAgentToMap(agent);
+                    if (!agent.IsMainAgent && !agent.IsMount && agent.Team != null)
+                    {
+                        AddAgentToMap(agent);
+                    }
                 }
                 _newAgents.Clear();
             }
-            _agentDictionary = new Dictionary<Agent, AgentStatusVM>(_agentStatusMap);
-            foreach (KeyValuePair<Agent, AgentStatusVM> entry2 in _agentDictionary)
+            // Only bars that can show (not toggled off, hit, focused or within DistanceCutOff) are projected to the screen and
+            // updated; all others are just hidden. The map isn't changed inside the loop: removals are applied after it.
+            bool barsShown = !_keyToggled && !_escapeMenuOpened;
+            Vec3 playerPos = _mainAgent != null ? _mainAgent.Position : _camera.Position;
+            Vec3 cameraPos = _camera.Position;
+            float cutOffSquared = (float)AgentStatusBarConfig.DistanceCutOff * AgentStatusBarConfig.DistanceCutOff;
+            foreach (KeyValuePair<Agent, AgentStatusVM> entry2 in _agentStatusMap)
             {
-                float num0;
-                float num1;
-                float num2;
-                Vec3 pos;
-                Vec3 playerPos;
                 // Never read a deleted agent's position (freed native pointer); the entry is dropped below.
                 if (entry2.Key.State == AgentState.Deleted)
                 {
+                    _entriesToRemove.Add(entry2);
                     continue;
                 }
-                if (entry2.Value.IsEnabled)
+                RefreshEntry(entry2.Key, entry2.Value, dt, barsShown, playerPos, cameraPos, cutOffSquared);
+                if (entry2.Value._isRemoved && !entry2.Value._isHit)
                 {
-                    num0 = 0f;
-                    num1 = 0f;
-                    num2 = 0f;
-                    pos = entry2.Value._agent.Position;
-                    float zOffset = ((!entry2.Key.HasMount) ? 2.2f : 3.2f);
-                    pos.z += zOffset;
-                    MBWindowManager.WorldToScreen(_camera, pos, ref num0, ref num1, ref num2);
-                    Agent mainAgent = _mainAgent;
-                    if (mainAgent != null)
-                    {
-                        _ = mainAgent.Position;
-                        if (true)
-                        {
-                            playerPos = _mainAgent.Position;
-                            goto IL_015e;
-                        }
-                    }
-                    playerPos = _camera.Position;
-                    goto IL_015e;
+                    _entriesToRemove.Add(entry2);
                 }
-                entry2.Value.IsHidden = true;
-                continue;
-            IL_015e:
-                entry2.Value.Distance = pos.Distance(playerPos);
-                if (!_keyToggled && !_escapeMenuOpened && num2 >= 0f && (entry2.Value._isHit || entry2.Value.Distance <= (float)AgentStatusBarConfig.DistanceCutOff || entry2.Value.IsAgentFocused))
+            }
+            for (int i = 0; i < _entriesToRemove.Count; i++)
+            {
+                RemoveEntry(_entriesToRemove[i].Key, _entriesToRemove[i].Value);
+            }
+            _entriesToRemove.Clear();
+        }
+
+        private void RefreshEntry(Agent agent, AgentStatusVM status, float dt, bool barsShown, Vec3 playerPos, Vec3 cameraPos, float cutOffSquared)
+        {
+            if (!status.IsEnabled || !barsShown)
+            {
+                status.IsHidden = true;
+                return;
+            }
+            Vec3 pos = status._agent.Position;
+            pos.z += (!agent.HasMount) ? 2.2f : 3.2f;
+            if (!status._isHit && !status.IsAgentFocused && (pos - playerPos).LengthSquared > cutOffSquared)
+            {
+                status.IsHidden = true;
+                return;
+            }
+            float num0 = 0f;
+            float num1 = 0f;
+            float num2 = 0f;
+            MBWindowManager.WorldToScreen(_camera, pos, ref num0, ref num1, ref num2);
+            status.Distance = pos.Distance(playerPos);
+            if (num2 >= 0f && (status._isHit || status.Distance <= (float)AgentStatusBarConfig.DistanceCutOff || status.IsAgentFocused))
+            {
+                status.IsHidden = false;
+                status.ScreenZ = Convert.ToInt32(num2);
+                status.ScreenDistance = pos.Distance(cameraPos);
+                status.ScreenXPosition = num0;
+                status.ScreenYPosition = num1;
+                status.tick(dt, _keyToggled);
+                if (RBMConfig.RBMConfig.rbmAiEnabled && RBMConfig.RBMConfig.postureEnabled && AgentStances.values.TryGetValue(agent, out Stance stanceData))
                 {
-                    entry2.Value.IsHidden = false;
-                    entry2.Value.ScreenZ = Convert.ToInt32(num2);
-                    entry2.Value.ScreenDistance = pos.Distance(_camera.Position);
-                    entry2.Value.ScreenXPosition = num0;
-                    entry2.Value.ScreenYPosition = num1;
-                    entry2.Value.tick(dt, _keyToggled);
-                    if (RBMConfig.RBMConfig.rbmAiEnabled && RBMConfig.RBMConfig.postureEnabled && AgentStances.values.TryGetValue(entry2.Key, out Stance stanceData))
-                    {
-                        entry2.Value.ShowStance = true;
-                        entry2.Value.Posture = Convert.ToInt32(stanceData.posture);
-                        entry2.Value.MaxPosture = Convert.ToInt32(stanceData.maxPosture);
-                        entry2.Value.Stamina = Convert.ToInt32(stanceData.stamina);
-                        entry2.Value.MaxStamina = Convert.ToInt32(stanceData.maxStamina);
-                    }
-                    else
-                    {
-                        entry2.Value.ShowStance = false;
-                    }
+                    status.ShowStance = true;
+                    status.Posture = Convert.ToInt32(stanceData.posture);
+                    status.MaxPosture = Convert.ToInt32(stanceData.maxPosture);
+                    status.Stamina = Convert.ToInt32(stanceData.stamina);
+                    status.MaxStamina = Convert.ToInt32(stanceData.maxStamina);
                 }
                 else
                 {
-                    entry2.Value.IsHidden = true;
+                    status.ShowStance = false;
                 }
             }
-            foreach (KeyValuePair<Agent, AgentStatusVM> entry in _agentDictionary.Where((KeyValuePair<Agent, AgentStatusVM> e) => e.Key.State == AgentState.Deleted || (e.Value._isRemoved && !e.Value._isHit)))
+            else
             {
-                RemoveEntry(entry.Key, entry.Value);
+                status.IsHidden = true;
             }
         }
 
